@@ -14,11 +14,12 @@ START_COMMENT = '<!--START_SECTION:waka-->'
 END_COMMENT = '<!--END_SECTION:waka-->'
 listReg = f"{START_COMMENT}[\\s\\S]+{END_COMMENT}"
 
-user = os.getenv('INPUT_USERNAME')
+repository = os.getenv('INPUT_REPOSITORY')
 waka_key = os.getenv('INPUT_WAKATIME_API_KEY')
 ghtoken = os.getenv('INPUT_GH_TOKEN')
 show_title = os.getenv("INPUT_SHOW_TITLE")
 commit_message = os.getenv("INPUT_COMMIT_MESSAGE")
+blocks = os.getenv("INPUT_BLOCKS")
 
 
 def this_week() -> str:
@@ -29,12 +30,15 @@ def this_week() -> str:
     return f"Week: {week_start.strftime('%d %B, %Y')} - {week_end.strftime('%d %B, %Y')}"
 
 
-def make_graph(percent: float) -> str:
+def make_graph(percent: float, blocks: str) -> str:
     '''Make progress graph from API graph'''
-    done_block = '█'
-    empty_block = '░'
-    pc_rnd = round(percent)
-    return f"{done_block*int(pc_rnd/4)}{empty_block*int(25-int(pc_rnd/4))}"
+    graph = blocks[len(blocks)-1] * int(percent / 4 + 1 / 6)
+    remainder_block = int((percent + (len(blocks)-2) /
+                           (len(blocks)-1)) % 4 * (len(blocks)-1) / len(blocks))
+    if remainder_block > 0:
+        graph += blocks[remainder_block]
+    graph += blocks[0] * (25 - len(graph))
+    return graph
 
 
 def get_stats() -> str:
@@ -59,15 +63,17 @@ def get_stats() -> str:
     except ValueError:
         print("The Data seems to be empty. Please wait for a day for the data to be filled in.")
         return '```text\nNo Activity tracked this Week\n```'
-    for lang in top_lang:
+    for lang in lang_data[:5]:
+        if lang['hours'] == 0 and lang['minutes'] == 0:
+            continue
         lth = len(lang['name'])
         ln_text = len(lang['text'])
         # following line provides a neat finish
         fmt_percent = format(lang['percent'], '0.2f').zfill(5)
         data_list.append(
-            f"{lang['name']}{' '*(pad + 3 - lth)}{lang['text']}{' '*(16 - ln_text)}{make_graph(lang['percent'])}   {fmt_percent} %")
+            f"{lang['name']}{' '*(pad + 3 - lth)}{lang['text']}{' '*(16 - ln_text)}{make_graph(lang['percent'], blocks)}   {fmt_percent} % ")
     print("Graph Generated")
-    data = ' \n'.join(data_list)
+    data = '\n'.join(data_list)
     if show_title == 'true':
         print("Stats with Weeks in Title Generated")
         return '```text\n'+this_week()+'\n\n'+data+'\n```'
@@ -91,9 +97,12 @@ def generate_new_readme(stats: str, readme: str) -> str:
 if __name__ == '__main__':
     g = Github(ghtoken)
     try:
-        repo = g.get_repo(f"{user}/{user}")
+        repo = g.get_repo(repository)
     except GithubException:
         print("Authentication Error. Try saving a GitHub Token in your Repo Secrets or Use the GitHub Actions Token, which is automatically used by the action.")
+        sys.exit(1)
+    if len(blocks) < 1:
+        print("Invalid blocks string. Please provide provide a string with 2 or more characters. Eg. '░▒▓█'")
         sys.exit(1)
     contents = repo.get_readme()
     waka_stats = get_stats()
@@ -101,4 +110,4 @@ if __name__ == '__main__':
     new_readme = generate_new_readme(stats=waka_stats, readme=rdmd)
     if new_readme != rdmd:
         repo.update_file(path=contents.path, message=commit_message,
-                         content=new_readme, sha=contents.sha, branch='master')
+                         content=new_readme, sha=contents.sha)
