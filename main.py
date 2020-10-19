@@ -63,7 +63,7 @@ def get_stats() -> str:
     except ValueError:
         print("The Data seems to be empty. Please wait for a day for the data to be filled in.")
         return '```text\nNo Activity tracked this Week\n```'
-    for lang in lang_data[:5]:
+    for lang in top_lang:
         if lang['hours'] == 0 and lang['minutes'] == 0:
             continue
         lth = len(lang['name'])
